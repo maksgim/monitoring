@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.15.0
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -10,7 +10,7 @@ services:
       - monitoring
 
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.12.1
     restart: unless-stopped
     pid: host
     command:
@@ -34,12 +34,14 @@ services:
     networks:
       - monitoring
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.2.2
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
     networks:
       - monitoring
   alertmanager:
@@ -57,10 +59,36 @@ services:
       - "127.0.0.1:9093:9093"
     networks:
       - monitoring
+  loki:
+    image: grafana/loki:3.7.8
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    networks:
+      - monitoring
+  alloy:
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - monitoring
+
 volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  loki_data:
+  alloy_data:
 networks:
   monitoring:
 
