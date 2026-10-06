@@ -5,6 +5,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
     networks:
       - monitoring
 
@@ -41,11 +42,25 @@ services:
       - grafana_data:/var/lib/grafana
     networks:
       - monitoring
-
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/telegram_token:/etc/alertmanager/telegram_token:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - monitoring
 volumes:
   prometheus_data:
   grafana_data:
-
+  alertmanager_data:
 networks:
   monitoring:
 
