@@ -352,23 +352,71 @@ monitoring/
 Тома `prometheus_data` и `grafana_data` находятся на хосте и в репозиторий не попадают.
 
 ---
+## Алерты (Alertmanager + Telegram)
 
-## Известные ограничения и планы
+Prometheus проверяет правила каждые несколько секунд и при срабатывании отправляет алерт в Alertmanager. Тот группирует уведомления и отправляет их в Telegram-бота. Когда проблема уходит, приходит сообщение о восстановлении.
 
-**Ограничения**
+```mermaid
+flowchart LR
+    NE[node-exporter] --> P[Prometheus]
+    CA[cAdvisor] --> P
+    P -->|правила alert.rules.yml| AM[Alertmanager]
+    AM -->|Bot API| TG[Telegram]
+    P --> G[Grafana]
+```
 
-- Метрики показывают потребление ресурсов, но не отвечают на вопросы «сколько запросов и ошибок» и «доступен ли сайт». Для этого нужны метрики приложения.
-- Образы Prometheus, Grafana и node-exporter используют тег `latest`. Для воспроизводимости лучше закрепить версии.
-- Доступ к Grafana без HTTPS возможен только через SSH-туннель.
-- Оповещений (alerts) пока нет: проблему видно только при открытом дашборде.
-- Данные Prometheus по умолчанию хранятся 15 дней.
+### Правила
 
-**Планы**
+| Алерт | Условие | Задержка | Важность |
+|---|---|---|---|
+| `TargetDown` | любая цель Prometheus недоступна | 1 мин | critical |
+| `ContainerDown` | контейнер не виден cAdvisor более 60 секунд | 1 мин | critical |
+| `DiskAlmostFull` | диск заполнен более чем на 85% | 5 мин | warning |
+| `HighMemoryUsage` | занято более 90% оперативной памяти | 5 мин | warning |
+| `HighCpuUsage` | загрузка CPU выше 85% | 10 мин | warning |
 
-- [ ] Обратный прокси с HTTPS (Let's Encrypt) перед Grafana, публикация на 80/443 вместо туннеля
-- [ ] Пароль администратора Grafana через переменную окружения из `.env`
-- [ ] Закрепить версии образов
-- [ ] `nginx-prometheus-exporter` и `mysqld-exporter` для метрик приложения
-- [ ] Alertmanager: уведомления при нехватке памяти, диска и падении контейнеров
-- [ ] Автоматический деплой мониторинга через GitHub Actions по SSH (по аналогии с проектом `prod`)
+Правила лежат в `prometheus/alert.rules.yml`. Параметр `for` защищает от ложных срабатываний при коротких скачках нагрузки.
+
+### Настройка уведомлений
+
+- Alertmanager группирует алерты по `alertname` и `instance`, ждёт 30 секунд перед первой отправкой и повторяет напоминание каждые 4 часа, пока проблема не исчезла (`alertmanager/alertmanager.yml`).
+- Токен бота хранится в отдельном файле `alertmanager/telegram_token`, который монтируется в контейнер только на чтение и исключён из репозитория через `.gitignore`. В конфиге указывается только путь к файлу (`bot_token_file`).
+- Порт Alertmanager опубликован только на `127.0.0.1:9093`, наружу он недоступен.
+
+### Как запустить у себя
+
+1. Создай бота через @BotFather, напиши ему `/start` и получи chat_id через `getUpdates`.
+2. Положи токен одной строкой в `alertmanager/telegram_token`.
+3. Впиши свой chat_id в `alertmanager/alertmanager.yml`.
+4. Запусти стек:
+
+```bash
+docker compose up -d
+```
+
+### Проверка
+
+Тестовый алерт напрямую в Alertmanager:
+
+```bash
+curl -XPOST http://127.0.0.1:9093/api/v2/alerts \
+  -H "Content-Type: application/json" \
+  -d '[{"labels":{"alertname":"TestAlert","severity":"warning"},"annotations":{"summary":"Тест алерта"}}]'
+```
+
+Проверка полной цепочки: остановить `monitoring-node-exporter-1` и через пару минут получить `TargetDown` в Telegram.
+
+```bash
+docker stop monitoring-node-exporter-1
+docker start monitoring-node-exporter-1
+```
+
+Загруженные правила можно посмотреть в Prometheus на странице Alerts или через API: `/api/v1/rules`.
+
+![Уведомление в Telegram]
+
+
+<img width="528" height="807" alt="image" src="https://github.com/user-attachments/assets/33e69444-8d83-45f5-a440-f86509ffd4b0" />
+
+
 
