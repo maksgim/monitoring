@@ -11,3 +11,9 @@ receivers:
       - bot_token_file: /etc/alertmanager/telegram_token
         chat_id: 760376143
         send_resolved: true
+        parse_mode: ''
+        message: |-
+          {{ if eq .Status "firing" }}🔥 ПРОБЛЕМА{{ else }}✅ РЕШЕНО{{ end }}
+          {{ range .Alerts -}}
+          {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Labels.alertname }}{{ end }}
+          {{ end }}

@@ -1,6 +1,13 @@
 groups:
   - name: host-and-containers
     rules:
+      - alert: ContainerRestarted
+        expr: resets(container_cpu_usage_seconds_total{name!=""}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Контейнер {{ $labels.name }} перезапускался"
+
       - alert: TargetDown
         expr: up == 0
         for: 1m
